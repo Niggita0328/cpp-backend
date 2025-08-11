@@ -58,7 +58,11 @@ static bool WriteExact(tcp::socket& socket, std::string_view data) {
 
     net::write(socket, net::buffer(data), net::transfer_exactly(data.size()), ec);
 
-    return !ec;
+    if (ec) {
+        std::cerr << "Write error: " << ec.message() << std::endl;
+        return false;
+    }
+    return true;
 }
 
 class SeabattleAgent {
@@ -68,35 +72,133 @@ public:
     }
 
     void StartGame(tcp::socket& socket, bool my_initiative) {
-        // TODO: реализуйте самостоятельно
+        std::cout << "Game started!" << std::endl;
+        bool my_turn = my_initiative;
+
+        while (!IsGameEnded()) {
+            if (my_turn) {
+                // Наш ход
+                PrintFields();
+                std::pair<int, int> move;
+                // Цикл для получения корректного хода от пользователя
+                while (true) {
+                    std::cout << "Your turn. Enter coordinates (e.g., A1): ";
+                    std::string line;
+                    std::getline(std::cin, line);
+                    if (std::cin.eof() || std::cin.fail()) {
+                        return; // Выход при ошибке или конце ввода
+                    }
+                    auto parsed_move = ParseMove(line);
+                    if (parsed_move) {
+                        move = *parsed_move;
+                        break;
+                    }
+                    std::cout << "Invalid coordinates. Try again." << std::endl;
+                }
+
+                // Отправляем ход
+                if (!WriteExact(socket, MoveToString(move))) {
+                    break; // Прерываем игру при ошибке отправки
+                }
+
+                // Читаем результат
+                auto response = ReadExact<1>(socket);
+                if (!response) {
+                    std::cout << "Connection lost." << std::endl;
+                    break;
+                }
+
+                auto result = static_cast<SeabattleField::ShotResult>((*response)[0]);
+                
+                // Обновляем поле противника и выводим результат
+                switch (result) {
+                    case SeabattleField::ShotResult::MISS:
+                        std::cout << "-> MISS" << std::endl;
+                        other_field_.MarkMiss(move.first, move.second);
+                        my_turn = false; // Передаем ход
+                        break;
+                    case SeabattleField::ShotResult::HIT:
+                        std::cout << "-> HIT!" << std::endl;
+                        other_field_.MarkHit(move.first, move.second);
+                        break;
+                    case SeabattleField::ShotResult::KILL:
+                        std::cout << "-> KILL!!!" << std::endl;
+                        other_field_.MarkKill(move.first, move.second);
+                        break;
+                }
+
+            } else {
+                // Ход противника
+                std::cout << "Waiting for opponent's move..." << std::endl;
+                auto move_str = ReadExact<2>(socket);
+                if (!move_str) {
+                    std::cout << "Connection lost." << std::endl;
+                    break;
+                }
+                
+                auto move = *ParseMove(*move_str);
+                
+                // Выполняем выстрел по нашему полю
+                auto result = my_field_.Shoot(move.first, move.second);
+                
+                // Отправляем результат
+                char result_char = static_cast<char>(result);
+                if (!WriteExact(socket, {&result_char, 1})) {
+                    break;
+                }
+                
+                std::cout << "Opponent shoots at " << *move_str;
+                switch (result) {
+                    case SeabattleField::ShotResult::MISS:
+                        std::cout << ". MISS" << std::endl;
+                        my_turn = true; // Забираем ход
+                        break;
+                    case SeabattleField::ShotResult::HIT:
+                        std::cout << ". HIT!" << std::endl;
+                        break;
+                    case SeabattleField::ShotResult::KILL:
+                        std::cout << ". KILL!!!" << std::endl;
+                        break;
+                }
+            }
+        }
+        
+        // Определение победителя
+        PrintFields();
+        if (my_field_.IsLoser()) {
+            std::cout << "You lose." << std::endl;
+        } else if (other_field_.IsLoser()) {
+            std::cout << "You win!" << std::endl;
+        } else {
+            std::cout << "Game interrupted." << std::endl;
+        }
     }
 
 private:
     static std::optional<std::pair<int, int>> ParseMove(const std::string_view& sv) {
         if (sv.size() != 2) return std::nullopt;
 
-        int p1 = sv[0] - 'A', p2 = sv[1] - '1';
+        int p1 = toupper(sv[0]) - 'A', p2 = sv[1] - '1';
 
-        if (p1 < 0 || p1 > 8) return std::nullopt;
-        if (p2 < 0 || p2 > 8) return std::nullopt;
+        if (p1 < 0 || p1 >= static_cast<int>(SeabattleField::field_size)) return std::nullopt;
+        if (p2 < 0 || p2 >= static_cast<int>(SeabattleField::field_size)) return std::nullopt;
 
         return {{p1, p2}};
     }
 
     static std::string MoveToString(std::pair<int, int> move) {
-        char buff[] = {static_cast<char>(move.first) + 'A', static_cast<char>(move.second) + '1'};
+        char buff[] = {static_cast<char>(move.first + 'A'), static_cast<char>(move.second + '1')};
         return {buff, 2};
     }
 
     void PrintFields() const {
+        std::cout << "My field:" << "                " << "Opponent's field:" << std::endl;
         PrintFieldPair(my_field_, other_field_);
     }
 
     bool IsGameEnded() const {
         return my_field_.IsLoser() || other_field_.IsLoser();
     }
-
-    // TODO: добавьте методы по вашему желанию
 
 private:
     SeabattleField my_field_;
@@ -105,32 +207,62 @@ private:
 
 void StartServer(const SeabattleField& field, unsigned short port) {
     SeabattleAgent agent(field);
+    
+    net::io_context io_context;
+    tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), port));
+    std::cout << "Waiting for connection on port " << port << "..." << std::endl;
 
-    // TODO: реализуйте самостоятельно
-
-    agent.StartGame(socket, false);
-};
+    try {
+        tcp::socket socket = acceptor.accept();
+        std::cout << "Client connected." << std::endl;
+        agent.StartGame(socket, false); // Сервер ходит вторым
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+    }
+}
 
 void StartClient(const SeabattleField& field, const std::string& ip_str, unsigned short port) {
     SeabattleAgent agent(field);
+    
+    net::io_context io_context;
+    tcp::socket socket(io_context);
 
-    // TODO: реализуйте самостоятельно
-
-    agent.StartGame(socket, true);
-};
+    try {
+        tcp::resolver resolver(io_context);
+        auto endpoints = resolver.resolve(ip_str, std::to_string(port));
+        std::cout << "Connecting to " << ip_str << ":" << port << "..." << std::endl;
+        net::connect(socket, endpoints);
+        std::cout << "Connected to server." << std::endl;
+        agent.StartGame(socket, true); // Клиент ходит первым
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+    }
+}
 
 int main(int argc, const char** argv) {
     if (argc != 3 && argc != 4) {
-        std::cout << "Usage: program <seed> [<ip>] <port>" << std::endl;
+        std::cout << "Usage: " << std::endl;
+        std::cout << "  server: " << argv[0] << " <seed> <port>" << std::endl;
+        std::cout << "  client: " << argv[0] << " <seed> <ip> <port>" << std::endl;
         return 1;
     }
 
-    std::mt19937 engine(std::stoi(argv[1]));
-    SeabattleField fieldL = SeabattleField::GetRandomField(engine);
+    try {
+        std::mt19937 engine(std::stoi(argv[1]));
+        SeabattleField fieldL = SeabattleField::GetRandomField(engine);
 
-    if (argc == 3) {
-        StartServer(fieldL, std::stoi(argv[2]));
-    } else if (argc == 4) {
-        StartClient(fieldL, argv[2], std::stoi(argv[3]));
+        if (argc == 3) {
+            unsigned short port = std::stoi(argv[2]);
+            StartServer(fieldL, port);
+        } else if (argc == 4) {
+            std::string ip = argv[2];
+            unsigned short port = std::stoi(argv[3]);
+            StartClient(fieldL, ip, port);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "An error occurred: " << e.what() << std::endl;
+        return 1;
     }
+    
+    return 0;
 }
