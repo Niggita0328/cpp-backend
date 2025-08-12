@@ -11,6 +11,16 @@ namespace http = beast::http;
 namespace json = boost::json;
 using namespace std::literals;
 
+
+namespace json_serializer {
+    // Только объявления!
+    json::value ToJson(const model::Road& road);
+    json::value ToJson(const model::Building& building);
+    json::value ToJson(const model::Office& office);
+    json::value ToJson(const model::Map& map);
+}
+
+
 class RequestHandler {
 public:
     explicit RequestHandler(model::Game& game)
@@ -45,7 +55,7 @@ public:
 
         if (verb == http::verb::get && target.starts_with("/api/v1/maps/"sv)) {
             std::string_view map_id_str = target;
-            map_id_str.remove_prefix(("/api/v1/maps/"sv).length()); // Используем remove_prefix для std::string_view
+            map_id_str.remove_prefix(("/api/v1/maps/"sv).length());
             
             model::Map::Id map_id{std::string{map_id_str}};
 
@@ -62,46 +72,8 @@ public:
                 return send(std::move(res));
             }
 
-            json::object map_obj;
-            map_obj["id"] = *map->GetId();
-            map_obj["name"] = map->GetName();
-            
-            json::array roads_array;
-            for (const auto& road : map->GetRoads()) {
-                json::object road_obj;
-                road_obj["x0"] = road.GetStart().x;
-                road_obj["y0"] = road.GetStart().y;
-                if (road.IsHorizontal()) {
-                    road_obj["x1"] = road.GetEnd().x;
-                } else {
-                    road_obj["y1"] = road.GetEnd().y;
-                }
-                roads_array.emplace_back(std::move(road_obj));
-            }
-            map_obj["roads"] = std::move(roads_array);
-
-            json::array buildings_array;
-            for (const auto& building : map->GetBuildings()) {
-                json::object building_obj;
-                building_obj["x"] = building.GetBounds().position.x;
-                building_obj["y"] = building.GetBounds().position.y;
-                building_obj["w"] = building.GetBounds().size.width;
-                building_obj["h"] = building.GetBounds().size.height;
-                buildings_array.emplace_back(std::move(building_obj));
-            }
-            map_obj["buildings"] = std::move(buildings_array);
-
-            json::array offices_array;
-            for (const auto& office : map->GetOffices()) {
-                json::object office_obj;
-                office_obj["id"] = *office.GetId();
-                office_obj["x"] = office.GetPosition().x;
-                office_obj["y"] = office.GetPosition().y;
-                office_obj["offsetX"] = office.GetOffset().dx;
-                office_obj["offsetY"] = office.GetOffset().dy;
-                offices_array.emplace_back(std::move(office_obj));
-            }
-            map_obj["offices"] = std::move(offices_array);
+            // Сериализация теперь вынесена в отдельные функции
+            json::value map_obj = json_serializer::ToJson(*map);
 
             http::response<http::string_body> res{http::status::ok, version};
             res.set(http::field::content_type, "application/json");
