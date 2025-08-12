@@ -55,6 +55,10 @@ void SessionBase::OnWrite(bool close, beast::error_code ec, [[maybe_unused]] std
 void SessionBase::Close() {
     beast::error_code ec;
     stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
+    // Если при закрытии сокета произошла ошибка, логируем
+    if (ec) {
+        return ReportError(ec, "shutdown");
+    }
 }
 
 }  // namespace http_server
