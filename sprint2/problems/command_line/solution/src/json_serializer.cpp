@@ -2,7 +2,7 @@
 
 namespace json_serializer {
 
-json::value ToJson(const model::Road& road) {
+json::value RoadToJson(const model::Road& road) {
     json::object road_obj;
     road_obj[keys::X0] = road.GetStart().x;
     road_obj[keys::Y0] = road.GetStart().y;
@@ -14,7 +14,7 @@ json::value ToJson(const model::Road& road) {
     return road_obj;
 }
 
-json::value ToJson(const model::Building& building) {
+json::value BuildingToJson(const model::Building& building) {
     json::object building_obj;
     building_obj[keys::X] = building.GetBounds().position.x;
     building_obj[keys::Y] = building.GetBounds().position.y;
@@ -23,7 +23,7 @@ json::value ToJson(const model::Building& building) {
     return building_obj;
 }
 
-json::value ToJson(const model::Office& office) {
+json::value OfficeToJson(const model::Office& office) {
     json::object office_obj;
     office_obj[keys::ID] = *office.GetId();
     office_obj[keys::X] = office.GetPosition().x;
@@ -33,7 +33,7 @@ json::value ToJson(const model::Office& office) {
     return office_obj;
 }
 
-json::value ToJson(const model::Map& map, bool for_list) {
+json::value MapToJson(const model::Map& map, bool for_list) {
     json::object map_obj;
     map_obj[keys::ID] = *map.GetId();
     map_obj[keys::NAME] = map.GetName();
@@ -41,33 +41,29 @@ json::value ToJson(const model::Map& map, bool for_list) {
     if (for_list) {
         return map_obj;
     }
-
-    // if(map.GetDogSpeed() > 0) {
-    //     map_obj[keys::DOG_SPEED] = map.GetDogSpeed();
-    // }
     
     json::array roads_array;
     for (const auto& road : map.GetRoads()) {
-        roads_array.emplace_back(ToJson(road));
+        roads_array.emplace_back(RoadToJson(road));
     }
     map_obj[keys::ROADS] = std::move(roads_array);
 
     json::array buildings_array;
     for (const auto& building : map.GetBuildings()) {
-        buildings_array.emplace_back(ToJson(building));
+        buildings_array.emplace_back(BuildingToJson(building));
     }
     map_obj[keys::BUILDINGS] = std::move(buildings_array);
 
     json::array offices_array;
     for (const auto& office : map.GetOffices()) {
-        offices_array.emplace_back(ToJson(office));
+        offices_array.emplace_back(OfficeToJson(office));
     }
     map_obj[keys::OFFICES] = std::move(offices_array);
 
     return map_obj;
 }
 
-json::value ToJson(const model::Dog& dog) {
+json::value DogToJson(const model::Dog& dog) {
     json::object dog_obj;
     dog_obj["pos"] = json::array{dog.GetPosition().x, dog.GetPosition().y};
     dog_obj["speed"] = json::array{dog.GetSpeed().u, dog.GetSpeed().v};

@@ -1,6 +1,7 @@
 #pragma once
 #include "model.h"
 #include "tagged.h"
+#include "logger.h"
 #include <vector>
 #include <random>
 #include <sstream>
@@ -58,7 +59,11 @@ private:
             last_tick_ = this_tick;
             try {
                 handler_(delta);
-            } catch (...) {
+            } catch (const std::exception& e) {
+                // Логируем стандартное исключение с деталями
+                json::value data{{"exception", e.what()}};
+                BOOST_LOG_TRIVIAL(error) << logging::add_value(additional_data, data)
+                                         << "Ticker handler exception";
             }
             ScheduleTick();
         }

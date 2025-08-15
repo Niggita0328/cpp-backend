@@ -3,6 +3,7 @@
 #include "model.h"
 #include "application.h"
 #include "json_serializer.h"
+#include "logger.h"
 #include <boost/json.hpp>
 #include <string>
 #include <filesystem>
@@ -10,6 +11,19 @@
 #include <regex>
 #include <boost/asio/dispatch.hpp>
 #include <chrono>
+#include <exception>
+
+using namespace std::literals;
+
+namespace endpoints {
+    constexpr auto MAPS = "/api/v1/maps";
+    constexpr auto MAP = "/api/v1/maps/"sv;
+    constexpr auto JOIN = "/api/v1/game/join";
+    constexpr auto PLAYERS = "/api/v1/game/players";
+    constexpr auto STATE = "/api/v1/game/state";
+    constexpr auto ACTION = "/api/v1/game/player/action";
+    constexpr auto TICK = "/api/v1/game/tick";
+}
 
 namespace http_handler {
 
@@ -18,7 +32,6 @@ namespace http = beast::http;
 namespace json = boost::json;
 namespace fs = std::filesystem;
 namespace net = boost::asio;
-using namespace std::literals;
 
 using StringResponse = http::response<http::string_body>;
 
@@ -97,35 +110,45 @@ void ApiHandler::HandleApiRequest(http::request<Body, http::basic_fields<Allocat
         action(player, std::forward<decltype(request)>(request), std::forward<decltype(sender)>(sender));
     };
 
-    if (target == "/api/v1/maps"sv) {
-        if (req.method() != http::verb::get && req.method() != http::verb::head) return invalid_method("GET, HEAD");
-        
+    if (target == endpoints::MAPS) {
+        if (req.method() != http::verb::get && req.method() != http::verb::head) {
+            return invalid_method("GET, HEAD");
+        }
+
         json::array maps_array;
         for (const auto& map : app_.ListMaps()) {
-            maps_array.push_back(json_serializer::ToJson(map, true));
+            maps_array.push_back(json_serializer::MapToJson(map, true));
         }
         return send(this->MakeStringResponse(http::status::ok, json::serialize(maps_array), version, keep_alive, method));
     }
 
-    if (target.starts_with("/api/v1/maps/"sv)) {
-        if (req.method() != http::verb::get && req.method() != http::verb::head) return invalid_method("GET, HEAD");
-        
+    if (target.starts_with(endpoints::MAP)) {
+        if (req.method() != http::verb::get && req.method() != http::verb::head) {
+            return invalid_method("GET, HEAD");
+        }
+
         std::string_view map_id_str = target;
-        map_id_str.remove_prefix(("/api/v1/maps/"sv).length());
+        map_id_str.remove_prefix((endpoints::MAP).length());
         
         const model::Map* map = app_.FindMap(model::Map::Id{std::string{map_id_str}});
-        if (!map) return not_found("Map not found");
+        if (!map) {
+            return not_found("Map not found");
+        }
 
-        return send(this->MakeStringResponse(http::status::ok, json::serialize(json_serializer::ToJson(*map, false)), version, keep_alive, method));
+        return send(this->MakeStringResponse(http::status::ok, json::serialize(json_serializer::MapToJson(*map, false)), version, keep_alive, method));
     }
 
-    if (target == "/api/v1/game/join") {
-        if (req.method() != http::verb::post) return invalid_method("POST", "Only POST method is expected");
-        
+    if (target == endpoints::JOIN) {
+        if (req.method() != http::verb::post) {
+            return invalid_method("POST", "Only POST method is expected");
+        }
+
         json::value jv;
         try {
             jv = json::parse(req.body());
-        } catch (...) {
+        } catch (const std::exception& e) {
+            json::value data{{"code", "invalidArgument"}, {"message", "Join game request parse error"}, {"exception", e.what()}};
+            BOOST_LOG_TRIVIAL(info) << logging::add_value(additional_data, data) << "Failed to parse join request body";
             return bad_request("Join game request parse error", "invalidArgument");
         }
         
@@ -139,7 +162,9 @@ void ApiHandler::HandleApiRequest(http::request<Body, http::basic_fields<Allocat
         try {
             user_name = obj.at("userName").as_string().c_str();
             map_id_str = obj.at("mapId").as_string().c_str();
-        } catch (...) {
+        } catch (const std::exception& e) {
+            json::value data{{"code", "invalidArgument"}, {"message", "Join game request parse error"}, {"exception", e.what()}};
+            BOOST_LOG_TRIVIAL(info) << logging::add_value(additional_data, data) << "Failed to parse join request fields";
             return bad_request("Join game request parse error", "invalidArgument");
         }
 
@@ -158,9 +183,11 @@ void ApiHandler::HandleApiRequest(http::request<Body, http::basic_fields<Allocat
         return send(this->MakeStringResponse(http::status::ok, json::serialize(resp_obj), version, keep_alive, method));
     }
 
-    if (target == "/api/v1/game/players") {
-        if (req.method() != http::verb::get && req.method() != http::verb::head) return invalid_method("GET, HEAD");
-        
+    if (target == endpoints::PLAYERS) {
+        if (req.method() != http::verb::get && req.method() != http::verb::head) {
+            return invalid_method("GET, HEAD");
+        }
+
         return handle_authorized(std::move(req), std::forward<Send>(send), 
             [&](app::Player* player, auto&&, auto&& sender){
                 json::object players_obj;
@@ -173,14 +200,16 @@ void ApiHandler::HandleApiRequest(http::request<Body, http::basic_fields<Allocat
             });
     }
 
-    if (target == "/api/v1/game/state") {
-        if (req.method() != http::verb::get && req.method() != http::verb::head) return invalid_method("GET, HEAD", "Invalid method");
+    if (target == endpoints::STATE) {
+        if (req.method() != http::verb::get && req.method() != http::verb::head) {
+            return invalid_method("GET, HEAD", "Invalid method");
+        }
 
         return handle_authorized(std::move(req), std::forward<Send>(send), 
             [&](app::Player* player, auto&&, auto&& sender){
                 json::object players_obj;
                 for (const auto& dog_ptr : player->GetSession()->GetDogs()) {
-                    players_obj[std::to_string(*dog_ptr->GetId())] = json_serializer::ToJson(*dog_ptr);
+                    players_obj[std::to_string(*dog_ptr->GetId())] = json_serializer::DogToJson(*dog_ptr);
                 }
                 json::object root_obj;
                 root_obj["players"] = players_obj;
@@ -188,9 +217,11 @@ void ApiHandler::HandleApiRequest(http::request<Body, http::basic_fields<Allocat
             });
     }
 
-    if (target == "/api/v1/game/player/action") {
-        if (req.method() != http::verb::post) return invalid_method("POST", "Invalid method");
-        
+    if (target == endpoints::ACTION) {
+        if (req.method() != http::verb::post) {
+            return invalid_method("POST", "Invalid method");
+        }
+
         if (req.find(http::field::content_type) == req.end() || req.at(http::field::content_type) != "application/json") {
             return bad_request("Invalid content type", "invalidArgument");
         }
@@ -200,7 +231,9 @@ void ApiHandler::HandleApiRequest(http::request<Body, http::basic_fields<Allocat
                 json::value jv;
                 try {
                     jv = json::parse(request.body());
-                } catch (...) {
+                } catch (const std::exception& e) {
+                    json::value data{{"code", "invalidArgument"}, {"message", "Failed to parse action"}, {"exception", e.what()}};
+                    BOOST_LOG_TRIVIAL(info) << logging::add_value(additional_data, data) << "Failed to parse action request body";
                     return bad_request("Failed to parse action", "invalidArgument");
                 }
                 if (!jv.is_object() || !jv.as_object().contains("move")) {
@@ -209,7 +242,9 @@ void ApiHandler::HandleApiRequest(http::request<Body, http::basic_fields<Allocat
                 std::string move_cmd;
                 try {
                     move_cmd = jv.as_object().at("move").as_string().c_str();
-                } catch(...) {
+                } catch(const std::exception& e) {
+                    json::value data{{"code", "invalidArgument"}, {"message", "Failed to parse action"}, {"exception", e.what()}};
+                    BOOST_LOG_TRIVIAL(info) << logging::add_value(additional_data, data) << "Failed to parse action request fields";
                     return bad_request("Failed to parse action", "invalidArgument");
                 }
 
@@ -222,7 +257,7 @@ void ApiHandler::HandleApiRequest(http::request<Body, http::basic_fields<Allocat
             });
     }
 
-    if (target == "/api/v1/game/tick") {
+    if (target == endpoints::TICK) {
         if (!manual_tick_) {
             return bad_request("Invalid endpoint");
         }
@@ -236,7 +271,9 @@ void ApiHandler::HandleApiRequest(http::request<Body, http::basic_fields<Allocat
             json::value jv = json::parse(req.body());
             auto delta_ms = jv.as_object().at("timeDelta").as_int64();
             app_.Tick(std::chrono::milliseconds(delta_ms));
-        } catch (...) {
+        } catch (const std::exception& e) {
+            json::value data{{"code", "invalidArgument"}, {"message", "Failed to parse tick request JSON"}, {"exception", e.what()}};
+            BOOST_LOG_TRIVIAL(info) << logging::add_value(additional_data, data) << "Failed to parse tick request";
             return bad_request("Failed to parse tick request JSON", "invalidArgument");
         }
         return send(this->MakeStringResponse(http::status::ok, "{}", version, keep_alive, method));
