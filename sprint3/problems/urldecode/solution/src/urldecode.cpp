@@ -34,7 +34,11 @@ std::string UrlDecode(std::string_view str) {
 
             i += 2;
         } else {
-            result += str[i];
+            if (str[i] == '+') {
+                result += ' ';
+            } else {
+                result += str[i];
+            }
         }
     }
 
