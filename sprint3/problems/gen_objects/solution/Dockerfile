@@ -41,4 +41,5 @@ USER www
 
 
 # Запускаем игровой сервер
-ENTRYPOINT ["/app/game_server", "/app/data/config.json", "/app/static"] 
+ENTRYPOINT ["/app/game_server"]
+CMD ["--config-file", "/app/data/config.json", "--www-root", "/app/static"]
