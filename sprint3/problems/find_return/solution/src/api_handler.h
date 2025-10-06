@@ -52,7 +52,14 @@ public:
     }
 
 private:
-    StringResponse MakeStringResponse(http::status status, std::string_view body, unsigned version, bool keep_alive, http::verb method, std::string_view content_type = "application/json"sv, std::optional<std::pair<http::field, std::string_view>> extra_header = std::nullopt);
+    StringResponse MakeStringResponse(
+        http::status status,
+        std::string_view body,
+        unsigned version,
+        bool keep_alive,
+        http::verb method,
+        std::string_view content_type = "application/json"sv,
+        std::optional<std::pair<http::field, std::string_view>> extra_header = std::nullopt);
     
     template <typename Body, typename Allocator>
     std::optional<Token> TryExtractToken(const http::request<Body, http::basic_fields<Allocator>>& req);

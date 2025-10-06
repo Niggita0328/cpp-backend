@@ -3,10 +3,18 @@
 namespace http_handler {
 
 ApiHandler::ApiHandler(app::Application& app, bool manual_tick)
-    : app_{app}, manual_tick_{manual_tick} {
+    : app_{app}
+    , manual_tick_{manual_tick} {
 }
 
-StringResponse ApiHandler::MakeStringResponse(http::status status, std::string_view body, unsigned version, bool keep_alive, http::verb method, std::string_view content_type, std::optional<std::pair<http::field, std::string_view>> extra_header) {
+StringResponse ApiHandler::MakeStringResponse(
+    http::status status,
+    std::string_view body,
+    unsigned version,
+    bool keep_alive,
+    http::verb method,
+    std::string_view content_type,
+    std::optional<std::pair<http::field, std::string_view>> extra_header) {
     StringResponse res{status, version};
     res.set(http::field::content_type, std::string(content_type));
     res.set(http::field::cache_control, "no-cache");

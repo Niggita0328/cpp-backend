@@ -42,6 +42,7 @@ namespace keys {
     constexpr auto ROTATION = "rotation";
     constexpr auto COLOR = "color";
     constexpr auto SCALE = "scale";
+    constexpr auto VALUE = "value";
 
 } // namespace keys
 
@@ -49,7 +50,7 @@ namespace json_loader {
 
 struct LoadedGameData {
     model::Game game;
-    extra_data::Repository extra_data;
+    extra_data::MapRepository extra_data;
 };
 
 LoadedGameData LoadGame(const std::filesystem::path& json_path);

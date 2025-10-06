@@ -31,8 +31,8 @@ public:
     Ticker(Strand strand, std::chrono::milliseconds period, Handler handler)
         : strand_{strand}
         , period_{period}
-        , handler_{std::move(handler)}
-        , timer_{strand_} {
+        , timer_{strand_}
+        , handler_{std::move(handler)} {
     }
 
     void Start() {
@@ -134,7 +134,7 @@ struct JoinGameResult {
 
 class Application {
 public:
-    explicit Application(model::Game& game, Players& players, extra_data::Repository& extra_data, net::io_context& ioc);
+    explicit Application(model::Game& game, Players& players, extra_data::MapRepository& extra_data, net::io_context& ioc);
 
     const std::vector<model::Map>& ListMaps() const;
     const model::Map* FindMap(const model::Map::Id& id) const;
@@ -150,7 +150,7 @@ public:
 private:
     model::Game& game_;
     Players& players_;
-    extra_data::Repository& extra_data_;
+    extra_data::MapRepository& extra_data_;
     net::strand<net::io_context::executor_type> strand_;
 };
 

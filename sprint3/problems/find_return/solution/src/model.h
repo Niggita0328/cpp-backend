@@ -6,6 +6,7 @@
 #include <memory>
 #include <random>
 #include <chrono>
+#include <cstdint>
 
 #include "tagged.h"
 #include "loot_generator.h"
@@ -87,10 +88,12 @@ public:
     const Vec2D& GetSpeed() const { return speed_; }
     const std::string& GetDirection() const { return dir_; }
     const Bag& GetBag() const { return bag_; }
+    std::uint64_t GetScore() const noexcept { return score_; }
 
     void SetPosition(PointD pos) { pos_ = pos; }
     void SetSpeed(Vec2D speed) { speed_ = speed; }
     void SetDirection(std::string dir) { dir_ = std::move(dir); }
+    void AddScore(std::uint64_t value) { score_ += value; }
     void AddToBag(uint64_t id, std::size_t type) { bag_.push_back(BagItem{id, type}); }
     void ClearBag() { bag_.clear(); }
     bool IsBagFull(std::size_t capacity) const { return bag_.size() >= capacity; }
@@ -102,6 +105,7 @@ private:
     Vec2D speed_{};
     std::string dir_ = "U"; // "L", "R", "U", "D"
     Bag bag_;
+    std::uint64_t score_ = 0;
 };
 
 struct Point {
@@ -213,6 +217,7 @@ public:
     using Roads = std::vector<Road>;
     using Buildings = std::vector<Building>;
     using Offices = std::vector<Office>;
+    using LootTypeValues = std::vector<std::uint64_t>;
 
     Map(Id id, std::string name) noexcept
         : id_(std::move(id))
@@ -264,6 +269,8 @@ public:
     }
 
     void AddOffice(Office office);
+    void SetLootTypeValues(LootTypeValues values);
+    const LootTypeValues& GetLootTypeValues() const noexcept { return loot_type_values_; }
 
 private:
     using OfficeIdToIndex = std::unordered_map<Office::Id, size_t, util::TaggedHasher<Office::Id>>;
@@ -274,6 +281,7 @@ private:
     Buildings buildings_;
     std::optional<double> dog_speed_;
     std::optional<std::size_t> bag_capacity_;
+    LootTypeValues loot_type_values_;
 
     OfficeIdToIndex warehouse_id_to_index_;
     Offices offices_;
@@ -292,6 +300,8 @@ public:
 
     void SetLootGeneratorConfig(LootGeneratorConfig config);
     void SetLootTypesCount(std::size_t count) noexcept;
+    void SetLootTypeValues(std::vector<std::uint64_t> values);
+    const std::vector<std::uint64_t>& GetLootTypeValues() const noexcept { return loot_type_values_; }
     const std::vector<LostObject>& GetLostObjects() const noexcept;
 
 private:
@@ -302,6 +312,7 @@ private:
     std::vector<LostObject> lost_objects_;
     std::optional<loot_gen::LootGenerator> loot_generator_;
     std::size_t loot_types_count_ = 0;
+    std::vector<std::uint64_t> loot_type_values_;
     uint64_t next_lost_object_id_ = 0;
     bool randomize_spawn_points_;
     std::size_t bag_capacity_ = 0;

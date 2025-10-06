@@ -96,10 +96,18 @@ void Map::AddOffice(Office office) {
     }
 }
 
+void Map::SetLootTypeValues(LootTypeValues values) {
+    loot_type_values_ = std::move(values);
+}
+
 GameSession::GameSession(const Map* map_ptr, std::size_t bag_capacity, bool randomize_spawn) 
     : map_(map_ptr)
     , randomize_spawn_points_{randomize_spawn}
-    , bag_capacity_{bag_capacity} {}
+    , bag_capacity_{bag_capacity} {
+    if (map_) {
+        SetLootTypeValues(map_->GetLootTypeValues());
+    }
+}
 
 void GameSession::AddDog(Dog* dog) {
     const auto& roads = map_->GetRoads();
@@ -343,7 +351,17 @@ void GameSession::Tick(std::chrono::milliseconds delta) {
                 dog->AddToBag(lost_object.id, lost_object.type);
                 collected[info.index] = true;
             } else {
-                if (!dog->GetBag().empty()) {
+                const auto& bag = dog->GetBag();
+                if (!bag.empty()) {
+                    std::uint64_t score_delta = 0;
+                    for (const auto& item : bag) {
+                        if (item.type < loot_type_values_.size()) {
+                            score_delta += loot_type_values_[item.type];
+                        }
+                    }
+                    if (score_delta > 0) {
+                        dog->AddScore(score_delta);
+                    }
                     dog->ClearBag();
                 }
             }
@@ -378,8 +396,18 @@ void GameSession::SetLootGeneratorConfig(LootGeneratorConfig config) {
     loot_generator_.emplace(config.period, config.probability);
 }
 
+void GameSession::SetLootTypeValues(std::vector<std::uint64_t> values) {
+    loot_type_values_ = std::move(values);
+    loot_types_count_ = loot_type_values_.size();
+}
+
 void GameSession::SetLootTypesCount(std::size_t count) noexcept {
     loot_types_count_ = count;
+    if (loot_type_values_.size() < count) {
+        loot_type_values_.resize(count, 0);
+    } else if (loot_type_values_.size() > count) {
+        loot_type_values_.resize(count);
+    }
 }
 
 const std::vector<LostObject>& GameSession::GetLostObjects() const noexcept {

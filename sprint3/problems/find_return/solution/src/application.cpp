@@ -66,7 +66,7 @@ std::vector<model::Dog> Players::GetDogs() const {
 }
 
 
-Application::Application(model::Game& game, Players& players, extra_data::Repository& extra_data, net::io_context& ioc)
+Application::Application(model::Game& game, Players& players, extra_data::MapRepository& extra_data, net::io_context& ioc)
     : game_{game}, players_{players}, extra_data_{extra_data}, strand_{net::make_strand(ioc)} {}
 
 const std::vector<model::Map>& Application::ListMaps() const {
@@ -95,7 +95,7 @@ std::optional<JoinGameResult> Application::JoinGame(const model::Map::Id& map_id
         }
     }
 
-    session->SetLootTypesCount(extra_data_.GetLootTypesCount(*map->GetId()));
+    session->SetLootTypeValues(map->GetLootTypeValues());
 
     auto dog = std::make_unique<model::Dog>(user_name);
     session->AddDog(dog.get());
@@ -110,8 +110,13 @@ Player* Application::FindByToken(const Token& token) {
 }
 
 void Application::MovePlayer(Player* player, const std::string& move_cmd) {
+    assert(player);
     model::Dog* dog = player->GetDog();
-    const auto* map = player->GetSession()->GetMap();
+    assert(dog);
+    model::GameSession* session = player->GetSession();
+    assert(session);
+    const auto* map = session->GetMap();
+    assert(map);
 
     double speed_val = map->GetDogSpeed();
     if (speed_val == 0.0) {

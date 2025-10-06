@@ -80,6 +80,7 @@ json::value DogToJson(const model::Dog& dog) {
         bag_array.emplace_back(std::move(bag_item));
     }
     dog_obj["bag"] = std::move(bag_array);
+    dog_obj["score"] = static_cast<std::uint64_t>(dog.GetScore());
     return dog_obj;
 }
 

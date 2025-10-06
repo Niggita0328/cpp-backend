@@ -12,7 +12,7 @@ struct MapData {
     boost::json::array loot_types;
 };
 
-class Repository {
+class MapRepository {
 public:
     void Clear() noexcept;
     void SetMapData(MapData data);

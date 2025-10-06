@@ -44,7 +44,7 @@ extra_data::MapData BuildExtraDataForMap(const std::string& id, const boost::jso
     return map_data;
 }
 
-model::Map LoadMap(const boost::json::value& map_json, extra_data::Repository& extra_repo) {
+model::Map LoadMap(const boost::json::value& map_json, extra_data::MapRepository& extra_repo) {
     const auto& map_obj = map_json.as_object();
 
     std::string id_str(map_obj.at(keys::ID).as_string());
@@ -69,6 +69,34 @@ model::Map LoadMap(const boost::json::value& map_json, extra_data::Repository& e
 
     for (const auto& office_json : map_obj.at(keys::OFFICES).as_array()) {
         map.AddOffice(LoadOffice(office_json.as_object()));
+    }
+
+    if (const auto* loot_types = map_obj.if_contains(keys::LOOT_TYPES)) {
+        std::vector<std::uint64_t> values;
+        const auto& loot_array = loot_types->as_array();
+        values.reserve(loot_array.size());
+        for (const auto& loot_json : loot_array) {
+            std::uint64_t value = 0;
+            const auto& loot_obj = loot_json.as_object();
+            if (const auto* value_field = loot_obj.if_contains(keys::VALUE)) {
+                const auto& v = *value_field;
+                if (v.is_int64()) {
+                    auto raw = v.as_int64();
+                    if (raw > 0) {
+                        value = static_cast<std::uint64_t>(raw);
+                    }
+                } else if (v.is_double()) {
+                    auto raw = v.as_double();
+                    if (raw > 0.0) {
+                        value = static_cast<std::uint64_t>(raw);
+                    }
+                }
+            }
+            values.push_back(value);
+        }
+        map.SetLootTypeValues(std::move(values));
+    } else {
+        map.SetLootTypeValues({});
     }
 
     extra_repo.SetMapData(BuildExtraDataForMap(id_str, map_obj));
